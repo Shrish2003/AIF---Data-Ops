@@ -80,7 +80,7 @@ class TestLLMResponseParser:
 
         assert result["priority"] == "HIGH"
         assert result["automation_possible"] is False
-        assert result["confidence"] == 0.82
+        assert result["confidence"] is None
 
     def test_missing_field_is_rejected(self, valid_llm_response):
 
@@ -137,18 +137,6 @@ class TestLLMResponseParser:
         broken = dict(valid_llm_response)
 
         broken["automation_possible"] = "maybe"
-
-        with pytest.raises(LLMResponseValidationError):
-
-            parser.parse(broken)
-
-    def test_confidence_out_of_range_is_rejected(self, valid_llm_response):
-
-        parser = LLMResponseParser()
-
-        broken = dict(valid_llm_response)
-
-        broken["confidence"] = 1.5
 
         with pytest.raises(LLMResponseValidationError):
 

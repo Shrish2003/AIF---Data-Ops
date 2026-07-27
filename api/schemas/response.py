@@ -46,7 +46,10 @@ class RecommendationResponse(BaseModel):
     recommendation_source: Optional[str] = None
 
 class CopilotChatResponse(BaseModel):
-    answer: str
+    reply: str
+    suggestedActions: List[str]
+    confidence: str
+    followUpQuestions: List[str]
 
 class AgentHealthDetail(BaseModel):
     status: str
@@ -70,3 +73,73 @@ class DashboardSummaryResponse(BaseModel):
     latest_recommendation: Optional[Dict[str, Any]] = None
     execution_time: float
     status: str
+
+# ==========================================================
+# Unified Dashboard API Contract Schemas
+# ==========================================================
+
+class UnifiedSummary(BaseModel):
+    overallHealth: int
+    overallStatus: str
+    riskLevel: str
+    activeAnomalies: int
+    criticalAnomalies: int
+    executionStatus: Optional[str] = None
+    lastExecutionTime: Optional[str] = None
+
+class UnifiedHealthNode(BaseModel):
+    id: str
+    label: str
+    score: int
+    status: str
+    platform: Optional[str] = None
+    lastExecution: Optional[str] = None
+    pipelineId: Optional[str] = None
+    pipelineName: Optional[str] = None
+    healthScore: Optional[int] = None
+
+class UnifiedHealth(BaseModel):
+    nodes: List[UnifiedHealthNode]
+
+class UnifiedAnomaly(BaseModel):
+    id: str
+    sev: str
+    severity: Optional[str] = None
+    time: str
+    service: str
+    pipeline: Optional[str] = None
+    signal: str
+    agent: str
+
+class UnifiedAgent(BaseModel):
+    id: str
+    displayName: Optional[str] = None
+    status: str
+    signals: int
+    signalsProcessed: Optional[int] = None
+    health: Optional[str] = None
+
+class UnifiedRiskSummary(BaseModel):
+    servicesAtRisk: int
+    criticalPipelines: int
+    cascadeProbability: int
+    monitoringCoverage: int
+    agentSignals: int
+
+class CopilotContext(BaseModel):
+    summary: Dict[str, Any]
+    anomalies: List[Dict[str, Any]]
+    health: Dict[str, Any]
+    agents: List[Dict[str, Any]]
+
+class UnifiedDashboardResponse(BaseModel):
+    useCaseId: str
+    useCaseName: str
+    timestamp: str
+    summary: UnifiedSummary
+    health: UnifiedHealth
+    anomalies: List[UnifiedAnomaly]
+    agents: List[UnifiedAgent]
+    riskSummary: Optional[UnifiedRiskSummary] = None
+    copilot: Optional[CopilotContext] = None
+

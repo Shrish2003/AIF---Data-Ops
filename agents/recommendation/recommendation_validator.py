@@ -69,8 +69,10 @@ class RecommendationValidator:
 
             return False, ["Candidate recommendation is not a JSON object."]
 
+        is_llm = candidate.get("recommendation_source") == "llm"
         for field in self.required_fields:
-
+            if field == "confidence" and is_llm:
+                continue
             if field not in candidate or candidate.get(field) in (None, ""):
 
                 reasons.append(f"Missing required field: {field}")

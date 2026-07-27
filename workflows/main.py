@@ -35,33 +35,451 @@ logger = logging.getLogger(__name__)
 # ==========================================================
 # MAIN
 # ==========================================================
+SUPPORTED_DATA_PIPELINE_PLATFORMS = {
+    "airflow",
+    "kafka",
+    "kubernetes",
+    "azure_data_factory",
+    "sap",
+    "sap erp"
+}
+
+def select_representative_pipeline_from_results(operational_entities, behavior_objects, risk_objects, integrity_objects, recommendation_agent):
+    engine = recommendation_agent.recommendation_engine
+    entities = {}
+    
+    for ds_name, items in operational_entities.items():
+        # Normalize name for case-insensitive checking
+        ds_normalized = ds_name.strip().lower()
+        if ds_normalized not in SUPPORTED_DATA_PIPELINE_PLATFORMS:
+            continue
+            
+        behaviors = behavior_objects.get(ds_name, [])
+        risks = risk_objects.get(ds_name, [])
+        integrities = integrity_objects.get(ds_name, [])
+        
+        beh_map = {x.get("entity_id"): x for x in behaviors}
+        risk_map = {x.get("entity_id"): x for x in risks}
+        integ_map = {x.get("entity_id"): x for x in integrities}
+        
+        for entity in items:
+            eid = entity.get("entity_id")
+            if not eid:
+                continue
+                
+            beh_obj = beh_map.get(eid, {})
+            risk_obj = risk_map.get(eid, {})
+            integ_obj = integ_map.get(eid, {})
+            
+            context = engine.analyze(beh_obj, risk_obj, integ_obj, entity)
+            priority = context.get("priority", "LOW")
+            risk_score = risk_obj.get("risk_score", 0.0)
+            
+            entities[eid] = {
+                "entity_id": eid,
+                "entity_name": entity.get("entity_name"),
+                "platform": entity.get("source_system"),
+                "priority": priority,
+                "risk_score": risk_score,
+                "behavior_severity": beh_obj.get("behavior", {}).get("severity"),
+                "integrity_status": integ_obj.get("integrity_status"),
+                "dataset_name": ds_name,
+                "op_entity": entity,
+                "behavior": beh_obj,
+                "risk": risk_obj,
+                "integrity": integ_obj
+            }
+            
+    all_entities = list(entities.values())
+    critical_entities = [e for e in all_entities if e["priority"] == "CRITICAL"]
+    high_entities = [e for e in all_entities if e["priority"] == "HIGH"]
+    
+    selected = None
+    reason = ""
+    
+    if critical_entities:
+        critical_entities.sort(key=lambda x: x["risk_score"], reverse=True)
+        selected = critical_entities[0]
+        reason = "Highest Priority Recommendation (CRITICAL)"
+    elif high_entities:
+        high_entities.sort(key=lambda x: x["risk_score"], reverse=True)
+        selected = high_entities[0]
+        reason = "Highest Priority Recommendation (HIGH)"
+    else:
+        all_entities.sort(key=lambda x: x["risk_score"], reverse=True)
+        if all_entities and all_entities[0]["risk_score"] > 0.0:
+            selected = all_entities[0]
+            reason = "Highest Risk Score"
+        else:
+            for platform_name in ["airflow", "kafka", "kubernetes", "azure_data_factory", "sap"]:
+                items = operational_entities.get(platform_name, [])
+                if items:
+                    first_eid = items[0].get("entity_id")
+                    if first_eid in entities:
+                        selected = entities[first_eid]
+                        reason = "First Available Pipeline"
+                        break
+                        
+    if not selected and all_entities:
+        selected = all_entities[0]
+        reason = "First Available Pipeline"
+        
+    return selected, reason
+
+
+def print_refined_execution_flow(selected_pipeline, selection_reason, parsed_raw, parsed_lookup, validation_results, operational_entities, observation_objects, behavior_objects, risk_objects, integrity_objects, recommendation_objects, recommendation_agent, execution_time, output_path):
+    representative_id = selected_pipeline["entity_id"]
+    representative_dataset = selected_pipeline["dataset_name"]
+    
+    print("==================================================")
+    print("Representative Pipeline Selected")
+    print("==================================================")
+    print(f"Pipeline ID             : {representative_id}")
+    print(f"Pipeline Name           : {selected_pipeline['entity_name']}")
+    print(f"Platform                : {selected_pipeline['platform']}")
+    print(f"Selection Reason        : {selection_reason}")
+    print("Decision Factors        :")
+    print(f"  • Recommendation Priority : {selected_pipeline['priority']}")
+    print(f"  • Risk Score              : {selected_pipeline['risk_score']}")
+    print(f"  • Behavior Severity       : {selected_pipeline['behavior_severity']}")
+    print(f"  • Integrity Status        : {selected_pipeline['integrity_status']}")
+    print("==================================================")
+    print()
+    
+    representative_op_entity = selected_pipeline["op_entity"]
+    representative_observation = next(
+        obs for obs in observation_objects[representative_dataset]
+        if obs.get("entity_id") == representative_id
+    )
+    representative_behavior = next(
+        beh for beh in behavior_objects[representative_dataset]
+        if beh.get("entity_id") == representative_id
+    )
+    representative_risk = next(
+        risk for risk in risk_objects[representative_dataset]
+        if risk.get("entity_id") == representative_id
+    )
+    representative_integrity = next(
+        integ for integ in integrity_objects[representative_dataset]
+        if integ.get("entity_id") == representative_id
+    )
+    representative_recommendation = next(
+        rec for rec in recommendation_objects[representative_dataset]
+        if rec.get("entity_id") == representative_id
+    )
+    
+    def print_arrow():
+        print()
+        try:
+            print("                                       ↓")
+        except UnicodeEncodeError:
+            print("                                       v")
+        print()
+
+    # CAPABILITY ADAPTER
+    print("==================================================")
+    print(f"{'Capability Adapter':^50}")
+    print("==================================================")
+    print(f"Pipeline ID             : {representative_id}")
+    print(f"Platform                : {representative_op_entity.get('source_system')}")
+    print(f"Execution Status        : {representative_op_entity.get('execution_status')}")
+    print(f"Timestamp               : {representative_op_entity.get('event_timestamp')}")
+    
+    records_parsed = sum(len(records) for records in parsed_raw.values())
+    lookup_parsed = sum(len(records) for records in parsed_lookup.values())
+    validated_records = sum(len(records) for records in validation_results.values())
+    total_entities = sum(len(v) for v in operational_entities.values())
+    
+    print("Overall Statistics      :")
+    print(f"  • Records Parsed      : {records_parsed}")
+    print(f"  • Lookup Records      : {lookup_parsed}")
+    print(f"  • Records Validated   : {validated_records}")
+    print(f"  • Entities Created    : {total_entities}")
+    print("==================================================")
+    
+    # OBSERVER
+    print_arrow()
+    print("==================================================")
+    print(f"{'Observer':^50}")
+    print("==================================================")
+    print(f"Pipeline ID             : {representative_id}")
+    obs_events = representative_observation.get("observations", {}).get("events", [])
+    obs_baseline = representative_observation.get("observations", {}).get("baseline", {})
+    obs_trend = representative_observation.get("observations", {}).get("trend", {})
+    obs_metrics = representative_observation.get("observations", {}).get("metrics", {})
+    
+    obs_state = derive_observation_status(obs_events, obs_baseline)
+    obs_reasons = summarize_observer_reason(obs_events, obs_baseline, obs_trend)
+    
+    print("Observed Metrics        :")
+    for m_name, m_val in obs_metrics.items():
+        print(f"  • {m_name}: {m_val}")
+    print("Detected Event          :")
+    if obs_events:
+        for ev in obs_events:
+            print(f"  • {ev}")
+    else:
+        print("  • None")
+    print("Trend                   :")
+    if obs_trend:
+        for t_name, t_val in obs_trend.items():
+            print(f"  • {t_name}: {t_val}")
+    else:
+        print("  • Stable")
+        
+    total_observations = sum(len(obs) for obs in observation_objects.values())
+    print("Overall Statistics      :")
+    print(f"  • Entities Received   : {total_entities}")
+    print(f"  • Observations Created: {total_observations}")
+    print("==================================================")
+    
+    # BEHAVIOR
+    print_arrow()
+    print("==================================================")
+    print(f"{'Behavior':^50}")
+    print("==================================================")
+    print(f"Pipeline ID             : {representative_id}")
+    beh_analysis = representative_behavior.get("behavior", {})
+    print(f"Behavior Score          : {beh_analysis.get('behavior_score')} / 100")
+    print(f"Severity                : {beh_analysis.get('severity')}")
+    
+    patterns = beh_analysis.get("patterns", [])
+    print(f"Pattern                 : {', '.join(patterns) if patterns else 'None'}")
+    
+    beh_reasons = summarize_behavior_reason(beh_analysis, obs_events, obs_baseline, obs_trend)
+    print("Reason                  :")
+    for r in beh_reasons:
+        print(f"  • {r}")
+        
+    total_behaviors = sum(len(beh) for beh in behavior_objects.values())
+    beh_stats = {"CRITICAL": 0, "WARNING": 0, "NORMAL": 0}
+    for ds, items in behavior_objects.items():
+        for item in items:
+            sev = item.get("behavior", {}).get("severity", "NORMAL").upper()
+            beh_stats[sev] = beh_stats.get(sev, 0) + 1
+            
+    print("Overall Statistics      :")
+    print(f"  • Behavior Objects    : {total_behaviors}")
+    print(f"  • Critical            : {beh_stats.get('CRITICAL', 0)}")
+    print(f"  • Warning             : {beh_stats.get('WARNING', 0)}")
+    print(f"  • Normal              : {beh_stats.get('NORMAL', 0)}")
+    print("==================================================")
+    
+    # RISK PREDICTION
+    print_arrow()
+    print("==================================================")
+    print(f"{'Risk Prediction':^50}")
+    print("==================================================")
+    print(f"Pipeline ID             : {representative_id}")
+    print(f"Risk Score              : {representative_risk.get('risk_score')} / 100")
+    print(f"Risk Severity           : {representative_risk.get('risk_severity')}")
+    print(f"Probability             : {representative_risk.get('risk_probability')}%")
+    print(f"Category                : {representative_risk.get('risk_category')}")
+    
+    total_risks = sum(len(risk) for risk in risk_objects.values())
+    risk_stats = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0}
+    for ds, items in risk_objects.items():
+        for item in items:
+            sev = item.get("risk_severity", "LOW").upper()
+            risk_stats[sev] = risk_stats.get(sev, 0) + 1
+            
+    print("Overall Statistics      :")
+    print(f"  • Risk Objects        : {total_risks}")
+    print(f"  • Critical            : {risk_stats.get('CRITICAL', 0)}")
+    print(f"  • High                : {risk_stats.get('HIGH', 0)}")
+    print(f"  • Medium              : {risk_stats.get('MEDIUM', 0)}")
+    print(f"  • Low                 : {risk_stats.get('LOW', 0)}")
+    print("==================================================")
+    
+    # INTEGRITY
+    print_arrow()
+    print("==================================================")
+    print(f"{'Integrity':^50}")
+    print("==================================================")
+    print(f"Pipeline ID             : {representative_id}")
+    print(f"Integrity Score         : {representative_integrity.get('integrity_score')} / 100")
+    print(f"Integrity Status        : {representative_integrity.get('integrity_status')}")
+    print(f"Trust Level             : {representative_integrity.get('output_trust_level')}")
+    print(f"Primary Failure         : {representative_integrity.get('primary_failure_reason') or 'None'}")
+    
+    total_integrities = sum(len(integ) for integ in integrity_objects.values())
+    integrity_stats = {"PASS": 0, "WARNING": 0, "FAIL": 0}
+    for ds, items in integrity_objects.items():
+        for item in items:
+            status = item.get("integrity_status", "PASS").upper()
+            if status == "FAILED":
+                status = "FAIL"
+            integrity_stats[status] = integrity_stats.get(status, 0) + 1
+            
+    print("Overall Statistics      :")
+    print(f"  • Integrity Objects   : {total_integrities}")
+    print(f"  • PASS                : {integrity_stats.get('PASS', 0)}")
+    print(f"  • WARNING             : {integrity_stats.get('WARNING', 0)}")
+    print(f"  • FAIL                : {integrity_stats.get('FAIL', 0)}")
+    print("==================================================")
+    
+    # RECOMMENDATION
+    print_arrow()
+    print("==================================================")
+    print(f"{'Recommendation':^50}")
+    print("==================================================")
+    print(f"Pipeline ID             : {representative_id}")
+    print("Provider                : Ollama")
+    print(f"Priority                : {representative_recommendation.get('priority')}")
+    
+    full_recommendation = representative_recommendation.get('recommendation', '')
+    import textwrap
+    wrapped_lines = textwrap.wrap(full_recommendation, width=90)
+    
+    print("Recommendation          :")
+    print("------------------------------------------------------------------------------------------")
+    for line in wrapped_lines:
+        print(f"  {line}")
+    print("------------------------------------------------------------------------------------------")
+        
+    print(f"Expected Impact         : {representative_recommendation.get('expected_impact')}")
+    print(f"Recovery Time           : {representative_recommendation.get('estimated_recovery_time')}")
+    print(f"Automation Possible     : {representative_recommendation.get('automation_possible')}")
+    print(f"Human Approval Required : {representative_recommendation.get('human_approval_required')}")
+    print(f"Recommendation Source   : {representative_recommendation.get('recommendation_source')}")
+    print(f"Selected Model          : {representative_recommendation.get('selected_model') or 'None'}")
+    print("==================================================")
+    
+    # RECOMMENDATION EVALUATION
+    print_arrow()
+    print("==================================================")
+    print(f"{'Recommendation Evaluation':^50}")
+    print("==================================================")
+    print(f"Pipeline ID             : {representative_id}")
+    
+    from agents.recommendation.recommendation_context_builder import RecommendationContextBuilder
+    from agents.recommendation.evaluation.golden_truth_repository import GoldenTruthRepository
+    from agents.recommendation.evaluation.scenario_resolver import ScenarioResolver
+    
+    builder = RecommendationContextBuilder()
+    rep_context = builder.build(
+        representative_behavior,
+        representative_risk,
+        representative_integrity,
+        representative_op_entity
+    )
+    repository = GoldenTruthRepository("data/evaluation/golden_truth_recommendations.json")
+    resolver = ScenarioResolver()
+    rep_scenarios = repository.get_all_scenarios()
+    rep_scenario = resolver.resolve(rep_context, rep_scenarios)
+    rep_scenario_name = rep_scenario.get("scenario_name") if (rep_scenario and rep_scenario.get("scenario_name")) else "Not Matched"
+    
+    print(f"Golden Truth Scenario   : {rep_scenario_name}")
+    print("Evaluation Engine       : RAGAS")
+    print("Metric                  : factual_correctness")
+    
+    rep_eval = representative_recommendation.get("evaluation", {})
+    rep_status = rep_eval.get("status", "UNAVAILABLE")
+    rep_metrics = rep_eval.get("metrics", {})
+    rep_score = rep_metrics.get("factual_correctness")
+    
+    print(f"Status                  : {rep_status}")
+    if rep_status == "COMPLETED" and rep_score is not None:
+        print(f"Score                   : {rep_score}")
+    else:
+        print("Score                   : N/A")
+        print("Evaluation unavailable.")
+    print("==================================================")
+    
+    golden_truth_matched = 0
+    golden_truth_unmatched = 0
+    ragas_completed = 0
+    ragas_unavailable = 0
+    llm_generated = 0
+    deterministic = 0
+    
+    for ds_name, recs in recommendation_objects.items():
+        beh_map = {x.get("entity_id"): x for x in behavior_objects.get(ds_name, [])}
+        risk_map = {x.get("entity_id"): x for x in risk_objects.get(ds_name, [])}
+        integ_map = {x.get("entity_id"): x for x in integrity_objects.get(ds_name, [])}
+        op_map = {x.get("entity_id"): x for x in operational_entities.get(ds_name, [])}
+        
+        for r in recs:
+            eid = r.get("entity_id")
+            
+            if r.get("recommendation_source") == "llm":
+                llm_generated += 1
+            else:
+                deterministic += 1
+                
+            eval_meta = r.get("evaluation", {})
+            if eval_meta.get("status") == "COMPLETED":
+                ragas_completed += 1
+            else:
+                ragas_unavailable += 1
+                
+            beh = beh_map.get(eid, {})
+            risk = risk_map.get(eid, {})
+            integ = integ_map.get(eid, {})
+            op = op_map.get(eid, {})
+            
+            ctx = builder.build(beh, risk, integ, op)
+            resolved = resolver.resolve(ctx, rep_scenarios)
+            if resolved is not None:
+                golden_truth_matched += 1
+            else:
+                golden_truth_unmatched += 1
+
+    # FINAL EXECUTION SUMMARY
+    print()
+    print("==================================================")
+    print(f"{'FINAL EXECUTION SUMMARY':^50}")
+    print("==================================================")
+    print("Pipeline Processing:")
+    print(f"  Operational Entities        : {total_entities}")
+    print(f"  Observation Objects         : {total_observations}")
+    print(f"  Behavior Objects            : {total_behaviors}")
+    print(f"  Risk Objects                : {total_risks}")
+    print(f"  Integrity Objects           : {total_integrities}")
+    print(f"  Recommendation Objects      : {total_integrities}")
+    print("--------------------------------------------------")
+    print("Recommendation Engine:")
+    print(f"  LLM Generated               : {llm_generated}")
+    print(f"  Deterministic               : {deterministic}")
+    print("--------------------------------------------------")
+    print("Evaluation:")
+    print(f"  Golden Truth Matched        : {golden_truth_matched}")
+    print(f"  Golden Truth Unmatched      : {golden_truth_unmatched}")
+    print(f"  Representative Eval Status  : {rep_status}")
+    print("--------------------------------------------------")
+    print("Execution:")
+    print(f"  Execution Time              : {execution_time} seconds")
+    print(f"  Output File                 : {output_path}")
+    print(f"  Execution Status            : SUCCESS")
+    print("==================================================")
+    
+
+
+
+def print_workflow_banner():
+    print("=" * 80)
+    print("                ADAPTIVE INTELLIGENCE FABRIC (AIF)")
+    print("=" * 80)
+
 
 def main():
+    import io
+    import sys
+    import contextlib
 
     start_time = time.perf_counter()
 
     print_workflow_banner()
 
-    # ======================================================
-    # STEP 1 : CSV CONNECTOR
-    # ======================================================
-
-    logger.debug("Starting capability adapter execution.")
-
+    # Step 1: Capability Adapter
+    print("Capability Adapter: Reading raw and business context sources...")
+    
     connector = CSVConnector("config/sources.yaml")
-
     connector.connect()
-
     datasets = connector.read_all()
-
     connector.disconnect()
 
-    # ======================================================
-    # Separate Raw Sources & Lookup Tables
-    # ======================================================
-
     raw_dataset_names = [
-
         "airflow",
         "kafka",
         "kubernetes",
@@ -69,244 +487,136 @@ def main():
         "sap",
         "manufacturing",
         "iot"
-
     ]
 
     lookup_dataset_names = [
-
         "business_context",
         "historical_baselines",
         "incident_history",
         "pipeline_lineage",
         "recommendation_history"
-
     ]
 
     raw_datasets = {
-
         name: datasets[name]
-
         for name in raw_dataset_names
-
     }
 
     lookup_datasets = {
-
         name: datasets[name]
-
         for name in lookup_dataset_names
-
     }
 
-    logger.debug(f"Raw Datasets Loaded    : {len(raw_datasets)}")
-    logger.debug(f"Lookup Datasets Loaded : {len(lookup_datasets)}")
-
-    # ======================================================
-    # STEP 2 : TABULAR PARSER
-    # ======================================================
-
+    # Step 2: Tabular Parser
     parser = TabularParser()
-
     parsed_raw = parser.parse_all(raw_datasets)
-
     parsed_lookup = parser.parse_all(lookup_datasets)
 
-    logger.debug("Parsing completed successfully.")
-
-    # ======================================================
-    # STEP 3 : MAPPING ENGINE
-    # ======================================================
-
+    # Step 3: Mapping Engine
     mapper = MappingEngine("config/mapping.yaml")
-
     mapped_data = mapper.map_all(parsed_raw)
 
-    logger.debug("Mapping completed successfully.")
-
-    # ======================================================
-    # STEP 4 : NORMALIZER
-    # ======================================================
-
+    # Step 4: Normalizer
     normalizer = Normalizer()
-
     normalized_data = normalizer.normalize_all(mapped_data)
 
-    logger.debug("Normalization completed successfully.")
-
-    # ======================================================
-    # STEP 5 : CONTEXT ENRICHER
-    # ======================================================
-
+    # Step 5: Context Enricher
     enricher = ContextEnricher(parsed_lookup)
-
     if hasattr(enricher, "health_check"):
         enricher.health_check()
-
     enriched_data = enricher.enrich_all(normalized_data)
 
-    logger.debug("Context enrichment completed successfully.")
-
-    # ======================================================
-    # STEP 6 : VALIDATION ENGINE
-    # ======================================================
-
+    # Step 6: Validation Engine
     validator = ValidationEngine()
-
     validator.health_check()
-
     validation_results = validator.validate_all(enriched_data)
 
-    logger.debug("Validation completed successfully.")
-
-    # ======================================================
-    # STEP 7 : OPERATIONAL ENTITY BUILDER
-    # ======================================================
-
+    # Step 7: Entity Builder
     entity_builder = OperationalEntityBuilder()
+    operational_entities = entity_builder.build_all(validation_results)
+    
+    print("Capability Adapter Completed Successfully.")
 
-    operational_entities = entity_builder.build_all(
-        validation_results
-    )
-
-    total_entities = sum(len(v) for v in operational_entities.values())
-    logger.debug(f"Operational Entities Generated : {total_entities}")
-
-    # ======================================================
-    # STEP 8 : OBSERVER AGENT
-    # ======================================================
-
+    # Step 8: Observer Agent
+    print("Observer Agent: Evaluating pipeline execution state and deviations...")
     observer = ObserverAgent()
-
     observer.health_check()
+    observation_objects = observer.observe_all(operational_entities)
+    print("Observer Agent Completed Successfully.")
 
-    observation_objects = observer.observe_all(
-        operational_entities
-    )
-
-    # ======================================================
-    # STEP 9 : BEHAVIOR AGENT
-    # ======================================================
-
+    # Step 9: Behavior Agent
+    print("Behavior Agent: Running baseline deviation and drift analysis...")
     behavior_agent = BehaviorAgent("config/behavior_rules.yaml")
     behavior_agent.health_check()
-
     behavior_objects = behavior_agent.analyze_all(observation_objects)
+    print("Behavior Agent Completed Successfully.")
 
-    # ======================================================
-    # STEP 10 : RISK PREDICTION AGENT
-    # ======================================================
-
+    # Step 10: Risk Prediction Agent
+    print("Risk Prediction Agent: Evaluating business risks and probability...")
     risk_agent = RiskPredictionAgent("config/risk_rules.yaml")
     risk_agent.health_check()
-
     risk_objects = risk_agent.predict_all(behavior_objects)
+    print("Risk Prediction Agent Completed Successfully.")
 
-    # ======================================================
-    # STEP 11 : INTEGRITY AGENT
-    #
-    # Consumes the Observation Object directly (which already
-    # carries the Operational Entity) rather than the Behavior
-    # or Risk Object -- Integrity validates output correctness,
-    # data quality, business rule compliance and lineage
-    # completeness, independent of anomaly detection or risk
-    # prediction, so it does not depend on their outputs.
-    # ======================================================
-
+    # Step 11: Integrity Agent
+    print("Integrity Agent: Validating schemas, lineage, and business rules...")
     integrity_agent = IntegrityAgent("config/integrity_rules.yaml")
     integrity_agent.health_check()
-
     integrity_objects = integrity_agent.evaluate_all(observation_objects)
+    print("Integrity Agent Completed Successfully.")
 
-    # ======================================================
-    # STEP 12 : RECOMMENDATION AGENT
-    # ======================================================
-
-    recommendation_agent = RecommendationAgent(
-        "config/recommendation_rules.yaml"
-    )
-
+    # Step 12: Recommendation Agent
+    print("Recommendation Agent: Formulating optimal response strategies...")
+    recommendation_agent = RecommendationAgent("config/recommendation_rules.yaml")
     recommendation_agent.health_check()
 
-    recommendation_objects = recommendation_agent.generate_all(
+    # Pre-select representative pipeline dynamically from current results
+    selected_pipeline, selection_reason = select_representative_pipeline_from_results(
         operational_entities,
-        behavior_objects,
-        risk_objects,
-        integrity_objects
-    )
-    # ======================================================
-    # SUMMARIES
-    #
-    # Built from each agent's own counters rather than from
-    # summary()'s return value, since summary() only prints
-    # and is not guaranteed to return a dict.
-    # ======================================================
-
-    adapter_summary = {
-        "data_sources_loaded": len(datasets),
-        "raw_datasets": len(raw_datasets),
-        "lookup_datasets": len(lookup_datasets),
-        "parsed_raw_records": sum(len(records) for records in parsed_raw.values()),
-        "parsed_lookup_records": sum(len(records) for records in parsed_lookup.values()),
-        "mapped_records": sum(len(records) for records in mapped_data.values()),
-        "normalized_records": sum(len(records) for records in normalized_data.values()),
-        "validated_records": sum(len(records) for records in validation_results.values()),
-        "operational_entities": total_entities
-    }
-
-    observer.summary()
-
-    observer_summary = {
-        "operational_entities": observer.total_entities,
-        "observation_objects": observer.total_observations
-    }
-
-    behavior_agent.summary()
-
-    behavior_summary = {
-        "observation_objects": behavior_agent.total_observations,
-        "behavior_objects": behavior_agent.total_behaviors
-    }
-
-    risk_agent.summary()
-
-    risk_summary = {
-        "behavior_objects": risk_agent.total_behaviors,
-        "risk_objects": risk_agent.total_risks
-    }
-
-    integrity_agent.summary()
-
-    integrity_summary = {
-        "observation_objects": integrity_agent.total_observations,
-        "integrity_objects": integrity_agent.total_integrities
-    }
-    recommendation_agent.summary()
-
-    recommendation_summary = {
-
-        "behavior_objects": recommendation_agent.total_behaviors,
-
-        "recommendation_objects": recommendation_agent.total_recommendations,
-
-        "generated_via_llm": recommendation_agent.total_generated_by_llm,
-
-        "generated_via_deterministic":
-            recommendation_agent.total_generated_by_deterministic
-
-    }
-    representative_flow = build_representative_flow(
-        operational_entities,
-        observation_objects,
         behavior_objects,
         risk_objects,
         integrity_objects,
-        recommendation_objects
+        recommendation_agent
     )
+    
+    if selected_pipeline:
+        representative_id = selected_pipeline["entity_id"]
+        recommendation_agent.multi_llm_selection_agent.representative_entity_id = representative_id
+        os.environ["LIMIT_EVALUATION"] = "true"
+        os.environ["REPRESENTATIVE_PIPELINE_ID"] = representative_id
+    else:
+        representative_id = None
 
-    # ======================================================
-    # EXECUTION OUTPUT
-    # ======================================================
+    # Suppress per-entity repetitive agent output and evaluation logs
+    root_logger = logging.getLogger()
+    old_log_level = root_logger.level
+    root_logger.setLevel(logging.ERROR)
+    
+    logging.getLogger("langchain").setLevel(logging.ERROR)
+    logging.getLogger("langchain_google_genai").setLevel(logging.ERROR)
+    logging.getLogger("google").setLevel(logging.ERROR)
+    logging.getLogger("ragas").setLevel(logging.ERROR)
 
+    f_out = io.StringIO()
+    f_err = io.StringIO()
+    with contextlib.redirect_stdout(f_out), contextlib.redirect_stderr(f_err):
+        try:
+            recommendation_objects = recommendation_agent.generate_all(
+                operational_entities,
+                behavior_objects,
+                risk_objects,
+                integrity_objects
+            )
+        except Exception as e:
+            logger.error(f"Error during recommendation generation: {e}")
+            raise e
+        finally:
+            os.environ["LIMIT_EVALUATION"] = "false"
+            
+    print("Recommendation Agent Completed Successfully.")
+    print()
+
+    # Save to execution_output.json exactly as before
     execution_output = {
         "adapter_output": {
             "parsed_raw": parsed_raw,
@@ -326,664 +636,71 @@ def main():
 
     output_dir = "output"
     output_path = os.path.join(output_dir, "execution_output.json")
-
     os.makedirs(output_dir, exist_ok=True)
-
     with open(output_path, "w", encoding="utf-8") as file:
-
         json.dump(execution_output, file, indent=2, default=str)
 
     execution_time = round(time.perf_counter() - start_time, 2)
 
-    print_execution_summary(
-        adapter_summary,
-        observer_summary,
-        behavior_summary,
-        risk_summary,
-        integrity_summary,
-        recommendation_summary,
-        representative_flow,
-        execution_time,
-        output_path
-    )
+    # Print the clean step-by-step presentation for ONLY the representative pipeline
+    if selected_pipeline:
+        print_refined_execution_flow(
+            selected_pipeline,
+            selection_reason,
+            parsed_raw,
+            parsed_lookup,
+            validation_results,
+            operational_entities,
+            observation_objects,
+            behavior_objects,
+            risk_objects,
+            integrity_objects,
+            recommendation_objects,
+            recommendation_agent,
+            execution_time,
+            output_path
+        )
+    else:
+        print("No representative pipeline could be selected.")
 
-    logger.debug("Output saved")
     return {
         "status": "SUCCESS",
         "execution_time": execution_time,
         "output_file": output_path,
-        "adapter_summary": adapter_summary,
-        "observer_summary": observer_summary,
-        "behavior_summary": behavior_summary,
-        "risk_summary": risk_summary,
-        "integrity_summary": integrity_summary,
-        "recommendation_summary": recommendation_summary
+        "adapter_summary": {
+            "data_sources_loaded": len(datasets),
+            "raw_datasets": len(raw_datasets),
+            "lookup_datasets": len(lookup_datasets),
+            "parsed_raw_records": sum(len(records) for records in parsed_raw.values()),
+            "parsed_lookup_records": sum(len(records) for records in parsed_lookup.values()),
+            "mapped_records": sum(len(records) for records in mapped_data.values()),
+            "normalized_records": sum(len(records) for records in normalized_data.values()),
+            "validated_records": sum(len(records) for records in validation_results.values()),
+            "operational_entities": sum(len(v) for v in operational_entities.values())
+        },
+        "observer_summary": {
+            "operational_entities": observer.total_entities,
+            "observation_objects": observer.total_observations
+        },
+        "behavior_summary": {
+            "observation_objects": behavior_agent.total_observations,
+            "behavior_objects": behavior_agent.total_behaviors
+        },
+        "risk_summary": {
+            "behavior_objects": risk_agent.total_behaviors,
+            "risk_objects": risk_agent.total_risks
+        },
+        "integrity_summary": {
+            "observation_objects": integrity_agent.total_observations,
+            "integrity_objects": integrity_agent.total_integrities
+        },
+        "recommendation_summary": {
+            "behavior_objects": recommendation_agent.total_behaviors,
+            "recommendation_objects": recommendation_agent.total_recommendations,
+            "generated_via_llm": recommendation_agent.total_generated_by_llm,
+            "generated_via_deterministic": recommendation_agent.total_generated_by_deterministic
+        }
     }
-
-def build_representative_flow(operational_entities, observation_objects, behavior_objects, risk_objects, integrity_objects,recommendation_objects):
-
-    dataset_name = "kafka" if "kafka" in operational_entities else next(iter(operational_entities))
-
-    representative_entity = operational_entities[dataset_name][0]
-    representative_entity_id = representative_entity.get("entity_id")
-
-    representative_observation = next(
-        observation
-        for observation in observation_objects[dataset_name]
-        if observation.get("entity_id") == representative_entity_id
-    )
-
-    representative_behavior = next(
-        behavior
-        for behavior in behavior_objects[dataset_name]
-        if behavior.get("entity_id") == representative_entity_id
-    )
-
-    representative_risk = next(
-        risk
-        for risk in risk_objects[dataset_name]
-        if risk.get("entity_id") == representative_entity_id
-    )
-
-    representative_integrity = next(
-        integrity
-        for integrity in integrity_objects[dataset_name]
-        if integrity.get("entity_id") == representative_entity_id
-    )
-    representative_recommendation = next(
-        recommendation
-        for recommendation in recommendation_objects[dataset_name]
-        if recommendation.get("entity_id") == representative_entity_id
-    )
-
-    observation_state = representative_observation.get("observations", {}).get("state", {})
-    observation_metrics = representative_observation.get("observations", {}).get("metrics", {})
-    observation_baseline = representative_observation.get("observations", {}).get("baseline", {})
-    observation_trend = representative_observation.get("observations", {}).get("trend", {})
-    observation_events = representative_observation.get("observations", {}).get("events", [])
-
-    behavior_analysis = representative_behavior.get("behavior", {})
-
-    # Risk Object is already flat (entity_id, risk_score, risk_severity,
-    # risk_probability, risk_category, prediction_confidence) — it has
-    # no nested "risk" sub-dict the way Behavior Object nests
-    # behavior_analysis, so it doubles as its own analysis view here.
-    risk_analysis = representative_risk
-
-    # Integrity Object is likewise already flat (entity_id,
-    # integrity_score, integrity_status, output_trust_level,
-    # validation_summary, validation_results, primary_failure_reason,
-    # evaluation_timestamp, agent_version).
-    integrity_analysis = representative_integrity
-
-    return {
-        "dataset_name": dataset_name,
-        "entity": representative_entity,
-        "observation": representative_observation,
-        "behavior": representative_behavior,
-        "risk": representative_risk,
-        "integrity": representative_integrity,
-        "observation_state": observation_state,
-        "observation_metrics": observation_metrics,
-        "observation_baseline": observation_baseline,
-        "observation_trend": observation_trend,
-        "observation_events": observation_events,
-        "behavior_analysis": behavior_analysis,
-        "risk_analysis": risk_analysis,
-        "integrity_analysis": integrity_analysis,
-        "recommendation": representative_recommendation,
-        "recommendation_analysis": representative_recommendation,
-    }
-
-
-def print_execution_summary(
-    adapter_summary,
-    observer_summary,
-    behavior_summary,
-    risk_summary,
-    integrity_summary,
-    recommendation_summary,
-    representative_flow,
-    execution_time,
-    output_path
-):
-
-    print_capability_adapter_summary(adapter_summary, representative_flow)
-    print_observer_summary(observer_summary, representative_flow)
-    print_behavior_summary(behavior_summary, representative_flow)
-    print_risk_summary(risk_summary, representative_flow)
-    print_integrity_summary(integrity_summary, representative_flow)
-    print_recommendation_summary(recommendation_summary,representative_flow)
-    print_footer_summary(
-        adapter_summary,
-        observer_summary,
-        behavior_summary,
-        risk_summary,
-        integrity_summary,
-        recommendation_summary,
-        execution_time,
-        output_path
-    )
-
-
-def print_workflow_banner():
-
-    print("=" * 80)
-    print("                ADAPTIVE INTELLIGENCE FABRIC (AIF)")
-    print("=" * 80)
-    print("Capability Adapter")
-    print("        ↓")
-    print("Operational Entity")
-    print("        ↓")
-    print("Observer Agent")
-    print("        ↓")
-    print("Observation Object")
-    print("        ↓")
-    print("Behavior Agent")
-    print("        ↓")
-    print("Behavior Object")
-    print("        ↓")
-    print("Risk Prediction Agent")
-    print("        ↓")
-    print("Risk Object")
-    print("        ↓")
-    print("Integrity Agent")
-    print("        ↓")
-    print("Integrity Object")
-    print("        ↓")
-    print("Recommendation Agent")
-    print("        ↓")
-    print("Recommendation Object")
-    print("=" * 80)
-
-
-def print_pipeline_footer():
-
-    print()
-    print("=" * 80)
-    print("AIF PIPELINE EXECUTED SUCCESSFULLY")
-    print("=" * 80)
-
-
-def print_section_header(step_number, title):
-
-    print()
-    print(f"STEP {step_number} : {title}")
-    print("-" * 80)
-
-
-def print_label(label, value, width=22):
-
-    print(f"{label:<{width}} : {value}")
-
-
-def format_inline_pairs(data, preferred_keys=None):
-
-    if not data:
-
-        return "None"
-
-    items = []
-
-    if preferred_keys:
-
-        for key in preferred_keys:
-
-            if key in data and data[key] is not None:
-
-                items.append(f"{key}={data[key]}")
-
-    else:
-
-        for key, value in data.items():
-
-            if value is not None:
-
-                items.append(f"{key}={value}")
-
-    return ", ".join(items) if items else "None"
-
-
-def format_list_values(values):
-
-    if not values:
-
-        return "None"
-
-    return ", ".join(str(value) for value in values)
-
-
-def format_status_count(value):
-
-    return value if value is not None else "None"
-
-
-def print_footer_summary(
-    adapter_summary,
-    observer_summary,
-    behavior_summary,
-    risk_summary,
-    integrity_summary,
-    recommendation_summary,
-    execution_time,
-    output_path
-):
-
-    print()
-    print("=" * 80)
-    print("Execution Output Saved")
-    print("=" * 80)
-    print()
-    print("Capability Adapter")
-    print_label("Operational Entities Created", adapter_summary["operational_entities"], 30)
-    print()
-    print("Observer Agent")
-    print_label("Observation Objects Created", observer_summary["observation_objects"], 30)
-    print()
-    print("Behavior Agent")
-    print_label("Behavior Objects Created", behavior_summary["behavior_objects"], 30)
-    print()
-    print("Risk Prediction Agent")
-    print_label("Risk Objects Created", risk_summary["risk_objects"], 30)
-    print()
-    print("Integrity Agent")
-    print_label("Integrity Objects Created", integrity_summary["integrity_objects"], 30)
-    print()
-    print("Recommendation Agent")
-    print_label("Recommendation Objects Created", recommendation_summary["recommendation_objects"], 30)
-    print()
-    print_label("Execution Status", "SUCCESS", 30)
-    print_label("Execution Time", f"{execution_time:.2f} seconds", 30)
-    print()
-    print("Output File")
-    print_label("Path", output_path, 30)
-    print()
-    print("=" * 80)
-
-
-def print_reasons(reasons):
-
-    for reason in reasons:
-
-        print(f"• {reason}")
-
-
-def print_capability_adapter_summary(adapter_summary, representative_flow):
-
-    print_section_header(1, "CAPABILITY ADAPTER")
-    print("Input")
-    print("------")
-    print_label("Data Sources Loaded", adapter_summary["data_sources_loaded"])
-    print_label("Raw Datasets", adapter_summary["raw_datasets"])
-    print_label("Lookup Datasets", adapter_summary["lookup_datasets"])
-
-    print()
-    print("Processing Summary")
-    print("------------------")
-    print_label("Records Parsed", adapter_summary["parsed_raw_records"])
-    print_label("Lookup Records Parsed", adapter_summary["parsed_lookup_records"])
-    print_label("Records Validated", adapter_summary["validated_records"])
-    print_label("Operational Entities Created", adapter_summary["operational_entities"])
-
-    print()
-    print("Representative Operational Entity")
-    print("----------------------------------")
-    entity = representative_flow["entity"]
-    print_label("Entity ID", entity.get("entity_id"), 18)
-    print_label("Platform", entity.get("source_system"), 18)
-    print_label("Pipeline", entity.get("entity_name"), 18)
-    print_label("Status", entity.get("execution_status"), 18)
-    print_label("Timestamp", entity.get("event_timestamp"), 18)
-
-    print()
-    print("Passing Operational Entity to Observer Agent...")
-
-    print()
-    print("Completion Status")
-    print("------------------")
-    print_label("Capability Adapter", "Completed Successfully")
-
-
-def print_observer_summary(observer_summary, representative_flow):
-
-    print_section_header(2, "OBSERVER AGENT")
-    print("Observer Agent Received Operational Entity")
-    print("------------------------------------------")
-    print_label("Entity ID", representative_flow["entity"].get("entity_id"), 18)
-    print_label("Platform", representative_flow["entity"].get("source_system"), 18)
-
-    print()
-    print("Observing Metrics...")
-    print()
-    print_label("Throughput", f"{representative_flow['observation_metrics'].get('throughput')} msg/sec", 18)
-    print_label("Consumer Lag", representative_flow['observation_metrics'].get('consumer_lag'), 18)
-
-    print()
-    print("Comparing with Historical Baseline...")
-    print()
-    print_label("Expected Throughput", representative_flow['observation_baseline'].get('throughput', {}).get('baseline'), 24)
-    throughput_deviation = representative_flow['observation_baseline'].get('throughput', {}).get('deviation_percent')
-    print_label("Deviation", f"+{throughput_deviation}%" if throughput_deviation is not None else "None", 24)
-
-    print()
-    print("Detecting Trend...")
-    print()
-    print_label("Trend", representative_flow['observation_trend'].get('throughput', 'Stable'), 18)
-
-    print()
-    print("Detecting Events...")
-    print()
-    observation_events = representative_flow["observation_events"]
-    if observation_events:
-        for event in observation_events:
-            print(f"✓ {event}")
-    else:
-        print("✓ None")
-
-    print()
-    print("Observation Created")
-    print("-------------------")
-    print_label(
-        "State",
-        derive_observation_status(
-            representative_flow["observation_events"],
-            representative_flow["observation_baseline"]
-        ),
-        18
-    )
-    print("Reason")
-    print_reasons(
-        summarize_observer_reason(
-            representative_flow["observation_events"],
-            representative_flow["observation_baseline"],
-            representative_flow["observation_trend"]
-        )
-    )
-
-    print()
-    print("Passing Observation Object to Behavior Agent...")
-
-    print()
-    print("Completion Status")
-    print("------------------")
-    print_label("Observation Object", "Generated", 18)
-
-
-def print_behavior_summary(behavior_summary, representative_flow):
-
-    print_section_header(3, "BEHAVIOR AGENT")
-    print("Behavior Agent Received Observation Object")
-    print("------------------------------------------")
-    print_label("Entity ID", representative_flow["entity"].get("entity_id"), 18)
-
-    print()
-    print("Analyzing Behavior...")
-    print()
-    print_label("Behavior Score", f"{representative_flow['behavior_analysis'].get('behavior_score')} /100", 18)
-    print_label("Severity", representative_flow['behavior_analysis'].get('severity'), 18)
-    confidence_percent = round((representative_flow['behavior_analysis'].get('confidence') or 0) * 100)
-    print_label("Confidence", f"{confidence_percent}%", 18)
-
-    print_label(
-        "Deviation Score",
-        format_deviation_score(representative_flow),
-        18
-    )
-
-    print_label(
-        "Drift Status",
-        format_drift_status(representative_flow),
-        18
-    )
-
-    print()
-    print("Detecting Behavior Pattern...")
-    print()
-    patterns = representative_flow['behavior_analysis'].get('patterns', [])
-    if patterns:
-        for pattern in patterns:
-            print(f"✓ {pattern}")
-    else:
-        print("✓ No abnormal pattern detected")
-
-    print()
-    print("Final Behavior Status")
-    print("---------------------")
-    print_label(
-        "Behavior Status",
-        derive_behavior_status(
-            representative_flow["behavior_analysis"],
-            representative_flow["observation_events"],
-            representative_flow["observation_baseline"],
-            representative_flow["observation_trend"]
-        ),
-        18
-    )
-
-    print()
-    print("Behavior Object Generated Successfully.")
-
-    print("Completion Status")
-    print("------------------")
-    print_label("Behavior Object", "Generated Successfully", 18)
-
-
-def print_risk_summary(risk_summary, representative_flow):
-
-    print_section_header(4, "RISK PREDICTION AGENT")
-    print("Risk Prediction Agent Received Behavior Object")
-    print("------------------------------------------------")
-    print_label("Entity ID", representative_flow["entity"].get("entity_id"), 18)
-
-    print()
-    print("Predicting Risk...")
-    print()
-
-    risk_analysis = representative_flow.get("risk_analysis", {})
-
-    print_label("Risk Score", f"{risk_analysis.get('risk_score')} /100", 18)
-    print_label("Risk Severity", risk_analysis.get('risk_severity'), 18)
-    print_label("Risk Category", risk_analysis.get('risk_category'), 18)
-    print_label("Risk Probability", f"{risk_analysis.get('risk_probability')}%", 18)
-    confidence_percent = round((risk_analysis.get('prediction_confidence') or 0) * 100)
-    print_label("Prediction Confidence", f"{confidence_percent}%", 18)
-
-    print()
-    print("Final Risk Assessment")
-    print("----------------------")
-    print_label(
-        "Risk Status",
-        derive_risk_status(risk_analysis),
-        18
-    )
-
-    print()
-    print("Risk Object Generated Successfully.")
-
-    print("Completion Status")
-    print("------------------")
-    print_label("Risk Object", "Generated Successfully", 18)
-
-
-def print_integrity_summary(integrity_summary, representative_flow):
-
-    print_section_header(5, "INTEGRITY AGENT")
-    print("Integrity Agent Received Operational Entity")
-    print("------------------------------------------------")
-    print_label("Entity ID", representative_flow["entity"].get("entity_id"), 18)
-
-    print()
-    print("Extracting Validation Features...")
-    print()
-
-    integrity_analysis = representative_flow.get("integrity_analysis", {})
-    validation_results = integrity_analysis.get("validation_results", {})
-
-    print("Validating Record Count...")
-    print_label("  Status", validation_results.get("record_count", {}).get("status"), 18)
-
-    print("Validating Schema...")
-    print_label("  Status", validation_results.get("schema", {}).get("status"), 18)
-
-    print("Validating Business Rules...")
-    print_label("  Status", validation_results.get("business_rules", {}).get("status"), 18)
-
-    print("Validating Data Quality...")
-    print_label("  Status", validation_results.get("data_quality", {}).get("status"), 18)
-
-    print("Validating Lineage...")
-    print_label("  Status", validation_results.get("lineage", {}).get("status"), 18)
-
-    print()
-    print("Calculating Integrity Score...")
-    print("Determining Trust Level...")
-    print("Generating Integrity Object...")
-
-    print()
-    print("Integrity Object Generated Successfully")
-    print("----------------------------------------")
-    print_label("Integrity Score", f"{integrity_analysis.get('integrity_score')} /100", 18)
-    print_label("Integrity Status", integrity_analysis.get('integrity_status'), 18)
-    print_label("Output Trust Level", integrity_analysis.get('output_trust_level'), 18)
-    print_label("Primary Failure", integrity_analysis.get('primary_failure_reason'), 18)
-
-    print()
-    print("Completion Status")
-    print("------------------")
-    print_label("Integrity Object", "Generated Successfully", 18)
-
-def print_recommendation_summary(recommendation_summary,representative_flow):
-
-    print_section_header(6, "RECOMMENDATION AGENT")
-
-    print("Recommendation Agent Received")
-    print("--------------------------------------------")
-
-    print_label("Entity ID",representative_flow["entity"].get("entity_id"),18)
-    print()
-
-    print("Analyzing Complete Context...")
-    print()
-
-    recommendation = representative_flow.get(
-        "recommendation_analysis",
-        {}
-    )
-
-    risk = representative_flow.get(
-        "risk_analysis",
-        {}
-    )
-
-    behavior = representative_flow.get(
-        "behavior_analysis",
-        {}
-    )
-
-    integrity = representative_flow.get(
-        "integrity_analysis",
-        {}
-    )
-
-    print_label(
-        "Risk Severity",
-        risk.get("risk_severity"),
-        22
-    )
-
-    print_label(
-        "Behavior Severity",
-        behavior.get("severity"),
-        22
-    )
-
-    print_label(
-        "Integrity Status",
-        integrity.get("integrity_status"),
-        22
-    )
-
-    print()
-
-    print("Generating Recommendation...")
-
-    print()
-
-    if recommendation.get("priority") is not None:
-        print_label(
-            "Priority",
-            recommendation.get("priority"),
-            22
-        )
-
-    if recommendation.get("expected_impact") is not None:
-        print_label(
-            "Expected Impact",
-            recommendation.get("expected_impact"),
-            22
-        )
-
-    if recommendation.get("estimated_recovery_time") is not None:
-        print_label(
-            "Estimated Recovery Time",
-            recommendation.get("estimated_recovery_time"),
-            22
-        )
-
-    if recommendation.get("automation_possible") is not None:
-        print_label(
-            "Automation Possible",
-            recommendation.get("automation_possible"),
-            22
-        )
-
-    if recommendation.get("human_approval_required") is not None:
-        print_label(
-            "Human Approval Required",
-            recommendation.get("human_approval_required"),
-            22
-        )
-
-    if recommendation.get("confidence") is not None:
-        print_label(
-            "Confidence",
-            recommendation.get("confidence"),
-            22
-        )
-
-    if recommendation.get("recommendation_source") is not None:
-        print_label(
-            "Recommendation Source",
-            recommendation.get("recommendation_source"),
-            22
-        )
-
-    if recommendation.get("selected_model") is not None:
-        print_label(
-            "Selected Model",
-            recommendation.get("selected_model"),
-            22
-        )
-
-    if recommendation.get("recommendation") is not None:
-        print_label(
-            "Recommendation",
-            recommendation.get("recommendation"),
-            22
-        )
-
-    print()
-
-    print("Recommendation Object Generated Successfully.")
-
-    print("Completion Status")
-    print("------------------")
-
-    print_label(
-        "Recommendation Object",
-        "Generated Successfully",
-        22
-    )
 
 def derive_observation_status(events, baseline):
 

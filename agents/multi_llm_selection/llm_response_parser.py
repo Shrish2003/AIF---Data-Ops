@@ -55,21 +55,18 @@ class LLMResponseParser:
         "estimated_recovery_time",
         "automation_possible",
         "human_approval_required",
-        "confidence",
         "generated_by",
     ]
 
     VALID_PRIORITIES = ["CRITICAL", "HIGH", "MEDIUM", "LOW"]
 
     VALID_CATEGORIES = [
-        "Pipeline Failure",
-        "Performance Degradation",
-        "Infrastructure Issue",
-        "Data Quality",
-        "Schema Validation",
-        "Dependency Failure",
-        "Resource Bottleneck",
-        "Platform Issue",
+        "GL Account Reconciliation",
+        "Tax Calculation Run",
+        "billing_pipeline",
+        "asset_management_etl",
+        "asset.maintenance.alerts",
+        "marketing.campaign.events",
     ]
 
     BOOLEAN_FIELDS = ["automation_possible", "human_approval_required"]
@@ -170,9 +167,6 @@ class LLMResponseParser:
         # Pre-validation JSON repair and normalization
         normalized = dict(raw_response)
 
-        if "confidence" not in normalized or normalized.get("confidence") in (None, ""):
-            normalized["confidence"] = 0.85
-
         # Ensure recommendation and enhanced_recommendation are mapped to each other
         if "enhanced_recommendation" not in normalized or normalized.get("enhanced_recommendation") in (None, ""):
             if "recommendation" in normalized and normalized.get("recommendation") not in (None, ""):
@@ -232,27 +226,6 @@ class LLMResponseParser:
 
             normalized[field] = coerced
 
-        try:
-
-            confidence_value = float(normalized.get("confidence"))
-
-        except (TypeError, ValueError):
-
-            raise LLMResponseValidationError(
-                f"Confidence is not numeric: "
-                f"{normalized.get('confidence')!r}"
-            )
-
-        if not (self.min_confidence <= confidence_value <=
-                self.max_confidence):
-
-            raise LLMResponseValidationError(
-                f"Confidence {confidence_value} outside allowed range "
-                f"[{self.min_confidence}, {self.max_confidence}]"
-            )
-
-        normalized["confidence"] = confidence_value
-
         conflicts = self._check_conflicts(
             normalized, expected_priority, expected_category
         )
@@ -263,5 +236,8 @@ class LLMResponseParser:
                 f"LLM response conflicts with the deterministic "
                 f"recommendation: {conflicts}"
             )
+
+        # Force LLM recommendation confidence to None
+        normalized["confidence"] = None
 
         return normalized

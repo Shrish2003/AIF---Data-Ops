@@ -60,7 +60,8 @@ class RecommendationObjectBuilder:
                 "estimated_recovery_time"
             ),
 
-            "confidence": recommendation.get("confidence"),
+            # DEPRECATED: LLM-generated confidence is deprecated.
+            "confidence": None if recommendation.get("recommendation_source") == "llm" else recommendation.get("confidence"),
 
             "automation_possible": recommendation.get(
                 "automation_possible"

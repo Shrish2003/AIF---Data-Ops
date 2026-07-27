@@ -188,8 +188,9 @@ class MultiLLMSelectionAgent:
 
         self.total_requests += 1
 
-        # For the demo, only call Ollama for the representative entity 'BRO0001' (and test entities starting with 'e')
-        if priority not in ESCALATION_PRIORITIES or (entity_id != "BRO0001" and not (isinstance(entity_id, str) and entity_id.startswith("e"))):
+        # For the demo, only call Ollama for the representative entity (and test entities starting with 'e')
+        rep_id = getattr(self, "representative_entity_id", None) or "BRO0001"
+        if priority not in ESCALATION_PRIORITIES or (entity_id != rep_id and not (isinstance(entity_id, str) and entity_id.startswith("e"))):
 
             logger.info(
                 f"Priority {priority!r} or entity {entity_id!r} does "

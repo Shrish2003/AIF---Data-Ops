@@ -81,7 +81,6 @@ given above:
   "reason": "a detailed explanation grounded in the data above, including preventive actions",
   "expected_impact": "copied exactly from the ALREADY-DETERMINED section above",
   "estimated_recovery_time": "copied exactly from the ALREADY-DETERMINED section above",
-  "confidence": 0.0,
   "automation_possible": true,
   "human_approval_required": true
 }}

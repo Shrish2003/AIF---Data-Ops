@@ -1,0 +1,440 @@
+[
+  {
+    "scenario_name": "Airflow Success Normal Low Warning",
+    "context": {
+      "platform": "Airflow",
+      "execution_status": "SUCCESS",
+      "behavior_severity": "NORMAL",
+      "risk_severity": "LOW",
+      "integrity_status": "WARNING",
+      "primary_failure_reason": "Lineage Validation"
+    },
+    "expected_recommendation": "Perform routine monitoring. Verify the data lineage graph and confirm missing upstream lineage dependencies are resolved in the metadata repository."
+  },
+  {
+    "scenario_name": "Airflow Success Normal Medium Warning",
+    "context": {
+      "platform": "Airflow",
+      "execution_status": "SUCCESS",
+      "behavior_severity": "NORMAL",
+      "risk_severity": "MEDIUM",
+      "integrity_status": "WARNING",
+      "primary_failure_reason": "Lineage Validation"
+    },
+    "expected_recommendation": "Check for lineage mismatch warning, review downstream impact, and verify integration lineage nodes."
+  },
+  {
+    "scenario_name": "Airflow Running Normal Low Warning",
+    "context": {
+      "platform": "Airflow",
+      "execution_status": "RUNNING",
+      "behavior_severity": "NORMAL",
+      "risk_severity": "LOW",
+      "integrity_status": "WARNING",
+      "primary_failure_reason": "Lineage Validation"
+    },
+    "expected_recommendation": "Monitor active Airflow tasks and verify that upstream lineage registration succeeds upon run completion."
+  },
+  {
+    "scenario_name": "Airflow Failed Normal Low Warning",
+    "context": {
+      "platform": "Airflow",
+      "execution_status": "FAILED",
+      "behavior_severity": "NORMAL",
+      "risk_severity": "LOW",
+      "integrity_status": "WARNING",
+      "primary_failure_reason": "Lineage Validation"
+    },
+    "expected_recommendation": "Investigate Airflow task logs for recent execution failures, check for resource contention or database lock issues, and retry the failed task instances."
+  },
+  {
+    "scenario_name": "Airflow Failed Normal Medium Warning",
+    "context": {
+      "platform": "Airflow",
+      "execution_status": "FAILED",
+      "behavior_severity": "NORMAL",
+      "risk_severity": "MEDIUM",
+      "integrity_status": "WARNING",
+      "primary_failure_reason": "Lineage Validation"
+    },
+    "expected_recommendation": "Review Airflow scheduler logs and tasks state for potential task failures or timeouts. Assess database locks or Celery queue capacity constraints."
+  },
+  {
+    "scenario_name": "Airflow Cancelled Normal Low Warning",
+    "context": {
+      "platform": "Airflow",
+      "execution_status": "CANCELLED",
+      "behavior_severity": "NORMAL",
+      "risk_severity": "LOW",
+      "integrity_status": "WARNING",
+      "primary_failure_reason": "Lineage Validation"
+    },
+    "expected_recommendation": "Identify if the Airflow DAG run was manually cleared or terminated by a timeout scheduler policy. Reschedule as needed."
+  },
+  {
+    "scenario_name": "Airflow Queued Normal Low Warning",
+    "context": {
+      "platform": "Airflow",
+      "execution_status": "QUEUED",
+      "behavior_severity": "NORMAL",
+      "risk_severity": "LOW",
+      "integrity_status": "WARNING",
+      "primary_failure_reason": "Lineage Validation"
+    },
+    "expected_recommendation": "Ensure the Airflow worker pool has sufficient slots available and there are no scheduling deadlock conditions in Celery/Kubernetes Executor."
+  },
+  {
+    "scenario_name": "Critical Airflow Run Failure",
+    "context": {
+      "platform": "Airflow",
+      "execution_status": "FAILED",
+      "behavior_severity": "CRITICAL",
+      "risk_severity": "CRITICAL",
+      "integrity_status": "FAILED"
+    },
+    "expected_recommendation": "Escalate immediately to the on-call owner and review recent changes for this entity."
+  },
+  {
+    "scenario_name": "Kafka Success Critical High Warning",
+    "context": {
+      "platform": "Kafka",
+      "execution_status": "SUCCESS",
+      "behavior_severity": "CRITICAL",
+      "risk_severity": "HIGH",
+      "integrity_status": "WARNING",
+      "primary_failure_reason": "Record Count Validation"
+    },
+    "expected_recommendation": "Check for consumer lag spikes and partition imbalances. Confirm that source topic message ingestion rates match consumer throughput."
+  },
+  {
+    "scenario_name": "Kafka Running Critical High Warning",
+    "context": {
+      "platform": "Kafka",
+      "execution_status": "RUNNING",
+      "behavior_severity": "CRITICAL",
+      "risk_severity": "HIGH",
+      "integrity_status": "WARNING",
+      "primary_failure_reason": "Record Count Validation"
+    },
+    "expected_recommendation": "Investigate streaming rate anomalies. Check if Kafka broker partitions are balanced and scale consumer threads if lag continues to increase."
+  },
+  {
+    "scenario_name": "Kafka Failed Critical High Warning",
+    "context": {
+      "platform": "Kafka",
+      "execution_status": "FAILED",
+      "behavior_severity": "CRITICAL",
+      "risk_severity": "HIGH",
+      "integrity_status": "WARNING",
+      "primary_failure_reason": "Record Count Validation"
+    },
+    "expected_recommendation": "Escalate critical consumer drop. Verify partition replication factor and consumer group coordinator health logs on the brokers."
+  },
+  {
+    "scenario_name": "Kafka Cancelled Critical High Warning",
+    "context": {
+      "platform": "Kafka",
+      "execution_status": "CANCELLED",
+      "behavior_severity": "CRITICAL",
+      "risk_severity": "HIGH",
+      "integrity_status": "WARNING",
+      "primary_failure_reason": "Record Count Validation"
+    },
+    "expected_recommendation": "Restart the terminated consumer group instance and verify that offset checkpointing continues from the last committed offset."
+  },
+  {
+    "scenario_name": "Kafka Queued Critical High Warning",
+    "context": {
+      "platform": "Kafka",
+      "execution_status": "QUEUED",
+      "behavior_severity": "CRITICAL",
+      "risk_severity": "HIGH",
+      "integrity_status": "WARNING",
+      "primary_failure_reason": "Record Count Validation"
+    },
+    "expected_recommendation": "Confirm client authentication configurations and broker connection limits allow the queued consumer group to establish connections."
+  },
+  {
+    "scenario_name": "Kafka Success Critical High Pass",
+    "context": {
+      "platform": "Kafka",
+      "execution_status": "SUCCESS",
+      "behavior_severity": "CRITICAL",
+      "risk_severity": "HIGH",
+      "integrity_status": "PASS",
+      "primary_failure_reason": "Record Count Validation"
+    },
+    "expected_recommendation": "Verify record ingestion rates and baseline thresholds since the stream is fully functional with PASS integrity status."
+  },
+  {
+    "scenario_name": "Kafka Success Critical Medium Warning",
+    "context": {
+      "platform": "Kafka",
+      "execution_status": "SUCCESS",
+      "behavior_severity": "CRITICAL",
+      "risk_severity": "MEDIUM",
+      "integrity_status": "WARNING",
+      "primary_failure_reason": "Record Count Validation"
+    },
+    "expected_recommendation": "Investigate moderate stream deviations. Review historical baselines and verify offset alignments."
+  },
+  {
+    "scenario_name": "Kafka Failed Critical Medium Warning",
+    "context": {
+      "platform": "Kafka",
+      "execution_status": "FAILED",
+      "behavior_severity": "CRITICAL",
+      "risk_severity": "MEDIUM",
+      "integrity_status": "WARNING",
+      "primary_failure_reason": "Record Count Validation"
+    },
+    "expected_recommendation": "Check the failed consumer instance offset commit log and verify broker network routes."
+  },
+  {
+    "scenario_name": "Kafka Running Critical Medium Warning",
+    "context": {
+      "platform": "Kafka",
+      "execution_status": "RUNNING",
+      "behavior_severity": "CRITICAL",
+      "risk_severity": "MEDIUM",
+      "integrity_status": "WARNING",
+      "primary_failure_reason": "Record Count Validation"
+    },
+    "expected_recommendation": "Monitor partition lag trend and confirm consumer thread count matches workload requirements."
+  },
+  {
+    "scenario_name": "Kafka Cancelled Critical Medium Warning",
+    "context": {
+      "platform": "Kafka",
+      "execution_status": "CANCELLED",
+      "behavior_severity": "CRITICAL",
+      "risk_severity": "MEDIUM",
+      "integrity_status": "WARNING",
+      "primary_failure_reason": "Record Count Validation"
+    },
+    "expected_recommendation": "Review termination trigger for the Kafka consumer group and perform a rolling restart."
+  },
+  {
+    "scenario_name": "Kafka Queued Critical Medium Warning",
+    "context": {
+      "platform": "Kafka",
+      "execution_status": "QUEUED",
+      "behavior_severity": "CRITICAL",
+      "risk_severity": "MEDIUM",
+      "integrity_status": "WARNING",
+      "primary_failure_reason": "Record Count Validation"
+    },
+    "expected_recommendation": "Verify coordinator connection status and check for group rebalancing lockups."
+  },
+  {
+    "scenario_name": "Kubernetes Success Normal Low Warning",
+    "context": {
+      "platform": "Kubernetes",
+      "execution_status": "SUCCESS",
+      "behavior_severity": "NORMAL",
+      "risk_severity": "LOW",
+      "integrity_status": "WARNING",
+      "primary_failure_reason": "Lineage Validation"
+    },
+    "expected_recommendation": "Monitor Kubernetes pod lifecycle events and ensure lineage agents can communicate with metadata APIs."
+  },
+  {
+    "scenario_name": "Kubernetes Running Normal Low Warning",
+    "context": {
+      "platform": "Kubernetes",
+      "execution_status": "RUNNING",
+      "behavior_severity": "NORMAL",
+      "risk_severity": "LOW",
+      "integrity_status": "WARNING",
+      "primary_failure_reason": "Lineage Validation"
+    },
+    "expected_recommendation": "Check active pods resource usage (CPU/memory requests) and verify node schedulability."
+  },
+  {
+    "scenario_name": "Kubernetes Failed Normal Low Warning",
+    "context": {
+      "platform": "Kubernetes",
+      "execution_status": "FAILED",
+      "behavior_severity": "NORMAL",
+      "risk_severity": "LOW",
+      "integrity_status": "WARNING",
+      "primary_failure_reason": "Lineage Validation"
+    },
+    "expected_recommendation": "Examine pod logs using kubectl, check for crash backoffs (OOMKilled), and review exit codes."
+  },
+  {
+    "scenario_name": "Kubernetes Cancelled Normal Low Warning",
+    "context": {
+      "platform": "Kubernetes",
+      "execution_status": "CANCELLED",
+      "behavior_severity": "NORMAL",
+      "risk_severity": "LOW",
+      "integrity_status": "WARNING",
+      "primary_failure_reason": "Lineage Validation"
+    },
+    "expected_recommendation": "Determine if the pod was terminated by an external eviction or resource preemption policy."
+  },
+  {
+    "scenario_name": "Kubernetes Queued Normal Low Warning",
+    "context": {
+      "platform": "Kubernetes",
+      "execution_status": "QUEUED",
+      "behavior_severity": "NORMAL",
+      "risk_severity": "LOW",
+      "integrity_status": "WARNING",
+      "primary_failure_reason": "Lineage Validation"
+    },
+    "expected_recommendation": "Ensure cluster autoscaler or node pools have sufficient capacity to transition the pod from Pending to Running."
+  },
+  {
+    "scenario_name": "High Risk Kubernetes Pod Crash",
+    "context": {
+      "platform": "Kubernetes",
+      "execution_status": "FAILED",
+      "behavior_severity": "CRITICAL",
+      "risk_severity": "HIGH",
+      "integrity_status": "WARNING"
+    },
+    "expected_recommendation": "Investigate this entity's recent deviation and incident history before the next scheduled run."
+  },
+  {
+    "scenario_name": "ADF Success Normal Low Failed",
+    "context": {
+      "platform": "Azure Data Factory",
+      "execution_status": "SUCCESS",
+      "behavior_severity": "NORMAL",
+      "risk_severity": "LOW",
+      "integrity_status": "FAILED",
+      "primary_failure_reason": "Lineage Validation"
+    },
+    "expected_recommendation": "Review the Data Factory pipeline definition and confirm self-hosted integration runtime telemetry is functioning."
+  },
+  {
+    "scenario_name": "ADF Failed Normal Low Failed",
+    "context": {
+      "platform": "Azure Data Factory",
+      "execution_status": "FAILED",
+      "behavior_severity": "NORMAL",
+      "risk_severity": "LOW",
+      "integrity_status": "FAILED",
+      "primary_failure_reason": "Lineage Validation"
+    },
+    "expected_recommendation": "Inspect the failed ADF activity run error description in Azure Monitor. Check connection configurations for linked services."
+  },
+  {
+    "scenario_name": "ADF Running Normal Low Failed",
+    "context": {
+      "platform": "Azure Data Factory",
+      "execution_status": "RUNNING",
+      "behavior_severity": "NORMAL",
+      "risk_severity": "LOW",
+      "integrity_status": "FAILED",
+      "primary_failure_reason": "Lineage Validation"
+    },
+    "expected_recommendation": "Verify pipeline progress in ADF monitoring portal. Ensure lineage collection service has permissions to read execution logs."
+  },
+  {
+    "scenario_name": "ADF Cancelled Normal Low Failed",
+    "context": {
+      "platform": "Azure Data Factory",
+      "execution_status": "CANCELLED",
+      "behavior_severity": "NORMAL",
+      "risk_severity": "LOW",
+      "integrity_status": "FAILED",
+      "primary_failure_reason": "Lineage Validation"
+    },
+    "expected_recommendation": "Check if the ADF pipeline run was cancelled via SDK or portal, and verify run triggers are still enabled."
+  },
+  {
+    "scenario_name": "ADF Queued Normal Low Failed",
+    "context": {
+      "platform": "Azure Data Factory",
+      "execution_status": "QUEUED",
+      "behavior_severity": "NORMAL",
+      "risk_severity": "LOW",
+      "integrity_status": "FAILED",
+      "primary_failure_reason": "Lineage Validation"
+    },
+    "expected_recommendation": "Ensure ADF concurrency limits on the pipeline are not exceeded, causing new triggers to remain queued."
+  },
+  {
+    "scenario_name": "ADF Transient Warning",
+    "context": {
+      "platform": "Azure Data Factory",
+      "execution_status": "FAILED",
+      "behavior_severity": "WARNING",
+      "risk_severity": "MEDIUM",
+      "integrity_status": "WARNING"
+    },
+    "expected_recommendation": "Schedule a review of this entity's behavior trend within the current work cycle."
+  },
+  {
+    "scenario_name": "SAP Success Normal Low Warning",
+    "context": {
+      "platform": "SAP ERP",
+      "execution_status": "SUCCESS",
+      "behavior_severity": "NORMAL",
+      "risk_severity": "LOW",
+      "integrity_status": "WARNING",
+      "primary_failure_reason": "Lineage Validation"
+    },
+    "expected_recommendation": "Monitor SAP job execution. Confirm RFC connections and SAP Gateway connection logs are clear."
+  },
+  {
+    "scenario_name": "SAP Running Normal Low Warning",
+    "context": {
+      "platform": "SAP ERP",
+      "execution_status": "RUNNING",
+      "behavior_severity": "NORMAL",
+      "risk_severity": "LOW",
+      "integrity_status": "WARNING",
+      "primary_failure_reason": "Lineage Validation"
+    },
+    "expected_recommendation": "Verify SAP active job status using SM37. Confirm that the background work process is not blocked."
+  },
+  {
+    "scenario_name": "SAP Failed Normal Low Warning",
+    "context": {
+      "platform": "SAP ERP",
+      "execution_status": "FAILED",
+      "behavior_severity": "NORMAL",
+      "risk_severity": "LOW",
+      "integrity_status": "WARNING",
+      "primary_failure_reason": "Lineage Validation"
+    },
+    "expected_recommendation": "Analyze SAP job log in SM37. Check for ABAP dumps in ST22 or authorization issues."
+  },
+  {
+    "scenario_name": "SAP Cancelled Normal Low Warning",
+    "context": {
+      "platform": "SAP ERP",
+      "execution_status": "CANCELLED",
+      "behavior_severity": "NORMAL",
+      "risk_severity": "LOW",
+      "integrity_status": "WARNING",
+      "primary_failure_reason": "Lineage Validation"
+    },
+    "expected_recommendation": "Check if the background SAP job was deleted or aborted by an administrator or scheduler command."
+  },
+  {
+    "scenario_name": "SAP Queued Normal Low Warning",
+    "context": {
+      "platform": "SAP ERP",
+      "execution_status": "QUEUED",
+      "behavior_severity": "NORMAL",
+      "risk_severity": "LOW",
+      "integrity_status": "WARNING",
+      "primary_failure_reason": "Lineage Validation"
+    },
+    "expected_recommendation": "Confirm that SAP release status is set and there are available background work processes in the instance pool."
+  },
+  {
+    "scenario_name": "Standard Low Priority Baseline",
+    "context": {
+      "behavior_severity": "NORMAL",
+      "risk_severity": "LOW",
+      "integrity_status": "PASS"
+    },
+    "expected_recommendation": "No immediate action required; continue routine monitoring."
+  }
+]

@@ -9,7 +9,8 @@ from api.schemas.response import (
     DependencyResponse,
     RecommendationResponse,
     CopilotChatResponse,
-    AgentsResponse
+    AgentsResponse,
+    UnifiedDashboardResponse
 )
 from api.services.pipeline_service import PipelineService
 from api.services.dashboard_service import DashboardService
@@ -32,12 +33,12 @@ def execute_pipeline() -> Dict[str, Any]:
     return PipelineService.execute()
 
 
-@router.get("/dashboard/summary", response_model=DashboardSummaryResponse, summary="Get main dashboard summary stats")
-def get_dashboard_summary():
+@router.get("/dashboard", response_model=UnifiedDashboardResponse, summary="Get unified dashboard data")
+def get_dashboard():
     """
-    Retrieve and aggregate summaries for the Operations Intelligence dashboard.
+    Retrieve and aggregate summaries for the unified dashboard.
     """
-    return DashboardService.get_summary()
+    return DashboardService.get_dashboard()
 
 
 @router.get("/pipelines/{pipelineId}", response_model=PipelineDetailsResponse, summary="Get pipeline details")
@@ -77,7 +78,8 @@ def copilot_chat(payload: CopilotQuery = Body(...)):
     """
     Interface with the Operations Copilot backend to ask questions about pipeline executions.
     """
-    return CopilotService.chat(payload.query)
+    return CopilotService.chat(payload.question)
+
 
 
 @router.get("/agents", response_model=AgentsResponse, summary="Get pipeline agent status")

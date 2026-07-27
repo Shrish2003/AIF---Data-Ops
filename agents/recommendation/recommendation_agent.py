@@ -17,6 +17,9 @@ from agents.recommendation.recommendation_object_builder import (
 from agents.multi_llm_selection.multi_llm_selection_agent import (
     MultiLLMSelectionAgent
 )
+from agents.recommendation.evaluation.evaluation_service import (
+    RecommendationEvaluationService
+)
 
 logger = logging.getLogger(__name__)
 
@@ -87,6 +90,8 @@ class RecommendationAgent:
         )
 
         self.recommendation_object_builder = RecommendationObjectBuilder()
+
+        self.evaluation_service = RecommendationEvaluationService()
 
         self.total_behaviors = 0
         self.total_recommendations = 0
@@ -272,7 +277,27 @@ class RecommendationAgent:
 
         )
 
-        return recommendation_object
+        print("Recommendation Generated Successfully")
+        print("Evaluation Started")
+        
+        evaluated_recommendation_object = self.evaluation_service.evaluate(
+            recommendation_object,
+            context
+        )
+        
+        print("Evaluation Completed")
+        
+        evaluation = evaluated_recommendation_object.get("evaluation", {})
+        status = evaluation.get("status")
+        metric_name = "factual_correctness"
+        metrics = evaluation.get("metrics", {})
+        score = metrics.get(metric_name, "N/A")
+        
+        print(f"Metric : {metric_name}")
+        print(f"Score : {score}")
+        print(f"Status : {status}")
+
+        return evaluated_recommendation_object
 
     # =====================================================
     # GENERATE FOR ONE DATASET
