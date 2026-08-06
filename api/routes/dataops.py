@@ -78,7 +78,7 @@ def copilot_chat(payload: CopilotQuery = Body(...)):
     """
     Interface with the Operations Copilot backend to ask questions about pipeline executions.
     """
-    return CopilotService.chat(payload.question)
+    return CopilotService.chat(payload)
 
 
 

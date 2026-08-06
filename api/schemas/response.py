@@ -47,9 +47,13 @@ class RecommendationResponse(BaseModel):
 
 class CopilotChatResponse(BaseModel):
     reply: str
+    rootCause: str
+    affectedServices: List[str]
+    businessImpact: str
     suggestedActions: List[str]
-    confidence: str
+    confidence: float
     followUpQuestions: List[str]
+    agentSources: List[str]
 
 class AgentHealthDetail(BaseModel):
     status: str

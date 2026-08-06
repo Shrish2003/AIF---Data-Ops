@@ -80,12 +80,14 @@ def test_copilot_chat_format():
     resp_bro = CopilotService.chat("tell me about BRO0001")
     assert "reply" in resp_bro
     assert "suggestedActions" in resp_bro
-    assert resp_bro["confidence"] == "high"
+    assert isinstance(resp_bro["confidence"], float)
+    assert 0.0 <= resp_bro["confidence"] <= 1.0
     assert "followUpQuestions" in resp_bro
     
     # Chat with generic query
     resp_generic = CopilotService.chat("is the pipeline stable?")
     assert "reply" in resp_generic
     assert "suggestedActions" in resp_generic
-    assert resp_generic["confidence"] == "medium"
+    assert isinstance(resp_generic["confidence"], float)
+    assert 0.0 <= resp_generic["confidence"] <= 1.0
     assert "followUpQuestions" in resp_generic
