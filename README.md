@@ -133,12 +133,12 @@ sequenceDiagram
     participant Evaluator as Recommendation Evaluator
     participant JSON as execution_output.json
 
-    CLI->>Adapter: Trigger Ingest & Connect Data Sources
+    CLI->>Adapter: Trigger Ingest and Connect Data Sources
     Note over Adapter: Ingests raw CSVs, normalizes schemas, enriches records with business context, and runs validation constraints
     Adapter-->>CLI: Return Operational Entities
     
     CLI->>Observer: Pass Operational Entities
-    Note over Observer: Compares actual throughput/lag to baseline averages; registers state transitions
+    Note over Observer: Compares actual throughput and lag to baseline averages, registers state transitions
     Observer-->>CLI: Return Observation Objects
     
     CLI->>Behavior: Pass Observation Objects
@@ -153,12 +153,12 @@ sequenceDiagram
     Note over Integrity: Validates schema drift, record metrics, business logic rules, and lineage
     Integrity-->>CLI: Return Integrity Objects
     
-    CLI->>RecAgent: Pass Context (Op Entity, Behavior, Risk, Integrity)
-    Note over RecAgent: Multi-LLM Selection routes critical issues to Ollama (Llama 3.2), falling back to deterministic rules
+    CLI->>RecAgent: Pass Context: Op Entity, Behavior, Risk, Integrity
+    Note over RecAgent: Multi-LLM Selection routes critical issues to Ollama Llama 3.2, falling back to deterministic rules
     RecAgent-->>CLI: Return Recommendation Objects
     
     CLI->>Evaluator: Pass Generated Recommendations
-    Note over Evaluator: Resolver matches scenario; Ragas scores factual correctness vs Golden Truth Expected recommendations
+    Note over Evaluator: Resolver matches scenario, Ragas scores factual correctness vs Golden Truth Expected recommendations
     Evaluator-->>CLI: Return Ragas Metrics
     
     CLI->>JSON: Save Aggregated Results
