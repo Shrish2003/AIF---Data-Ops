@@ -43,53 +43,75 @@ This system is designed as an operational command center for DataOps engineers. 
 The following diagram illustrates the logical architecture of the Data Pipeline Operations Intelligence system, illustrating the flow of data from ingestion through agent evaluation to the API and UI delivery layers:
 
 ```mermaid
-graph TD
-    subgraph Data Sources
-        RawLogs[(Raw CSV Logs<br>Airflow, Kafka, K8s, ADF, SAP)]
-        Lookups[(Canonical Lookup CSVs<br>Business, Baseline, Incidents, Lineage)]
-     graph End
+flowchart TD
+    subgraph DS["Data Sources"]
+        RawLogs[("Raw CSV Logs<br/>Airflow, Kafka, K8s, ADF, SAP")]
+        Lookups[("Canonical Lookup CSVs<br/>Business, Baseline, Incidents, Lineage")]
     end
 
-    subgraph Capability Adapter Ingestion
-        Conn[CSV Connector] --> Parser[Tabular Parser]
-        Parser --> MapEng[Mapping Engine]
-        MapEng --> Normalizer[Normalizer]
-        Normalizer --> Enricher[Context Enricher]
-        Enricher --> ValEng[Validation Engine]
-        ValEng --> Builder[Operational Entity Builder]
+    subgraph CA["Capability Adapter Ingestion"]
+        Conn["CSV Connector"] --> Parser["Tabular Parser"]
+        Parser --> MapEng["Mapping Engine"]
+        MapEng --> Normalizer["Normalizer"]
+        Normalizer --> Enricher["Context Enricher"]
+        Enricher --> ValEng["Validation Engine"]
+        ValEng --> Builder["Operational Entity Builder"]
     end
 
-    subgraph Intelligent Agent Fabric
-        Builder -->|Operational Entities| ObsAgent[Observer Agent]
-        ObsAgent -->|Observation Objects| BehAgent[Behavior Agent]
-        BehAgent -->|Behavior Objects| RiskAgent[Risk Agent]
-        ObsAgent -->|Observation Objects| IntegAgent[Integrity Agent]
+    subgraph AF["Intelligent Agent Fabric"]
+        ObsAgent["Observer Agent"]
+        BehAgent["Behavior Agent"]
+        RiskAgent["Risk Prediction Agent"]
+        IntegAgent["Integrity Agent"]
+        RecAgent["Recommendation Agent"]
         
-        RiskAgent & BehAgent & IntegAgent -->|Context Builder| RecAgent[Recommendation Agent]
-        
-        subgraph Multi-LLM Selection Routing
-            RecAgent --> MultiLLM[Multi-LLM Selector]
-            MultiLLM -->|Attempt 1| Ollama[Ollama Client<br>Llama 3.2 3B]
-            MultiLLM -->|Attempt 2| Gemini[Gemini Client]
-            MultiLLM -->|Attempt 3| Grok[Grok Client]
-            MultiLLM -->|Fallback| DetRules[Deterministic Rules]
+        ObsAgent -->|Operational Observation| BehAgent
+        BehAgent -->|Behavior Classification| RiskAgent
+        ObsAgent -->|Operational Observation| IntegAgent
+        RiskAgent -->|Context Builder| RecAgent
+        BehAgent -->|Context Builder| RecAgent
+        IntegAgent -->|Context Builder| RecAgent
+
+        subgraph MLLM["Multi-LLM Selection Routing"]
+            MultiLLM["Multi-LLM Selector"]
+            Ollama["Ollama Client<br/>Llama 3.2 3B"]
+            Gemini["Gemini Client"]
+            Grok["Grok Client"]
+            DetRules["Deterministic Rules"]
+            
+            MultiLLM -->|Attempt 1| Ollama
+            MultiLLM -->|Attempt 2| Gemini
+            MultiLLM -->|Attempt 3| Grok
+            MultiLLM -->|Fallback| DetRules
         end
+
+        RecAgent --> MultiLLM
     end
 
-    subgraph Evaluation Framework
-        Ollama -->|Factual Correctness| Ragas[Ragas Evaluator]
+    subgraph EF["Evaluation Framework"]
+        Ragas["Ragas Evaluator"]
+        GoldenTruth[("Golden Truth Dataset")]
+        
+        Ollama -->|Factual Correctness| Ragas
         DetRules -->|Factual Correctness| Ragas
-        Ragas -->|Compare Contexts| GoldenTruth[(Golden Truth Dataset)]
+        Ragas -->|Compare Contexts| GoldenTruth
     end
 
-    subgraph API & Frontend Presentation
-        Builder -.-> UnifiedDB[(Aggregated JSON DB)]
-        UnifiedDB --> FastAPI[FastAPI Server]
-        FastAPI --> WebUI[Unified Dashboard / Swagger UI]
-        FastAPI --> Copilot[Operations Copilot Chat]
+    subgraph APIUI["API & Frontend Presentation"]
+        UnifiedDB[("Aggregated JSON DB")]
+        FastAPI["FastAPI Server"]
+        WebUI["Unified Dashboard / Swagger UI"]
+        Copilot["Operations Copilot Chat"]
+        
+        UnifiedDB --> FastAPI
+        FastAPI --> WebUI
+        FastAPI --> Copilot
     end
 
-    RawLogs & Lookups --> Conn
+    RawLogs --> Conn
+    Lookups --> Enricher
+    Builder -->|Operational Entities| ObsAgent
+    Builder -.-> UnifiedDB
 ```
 
 ---
