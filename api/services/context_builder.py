@@ -68,7 +68,13 @@ class OperationalIntelligenceContextBuilder:
                 "behaviorAgent": behavior_output,
                 "riskPredictionAgent": risk_output,
                 "integrityAgent": integrity_output,
-                "recommendationAgent": recommendation_output
+                "recommendationAgent": recommendation_output,
+                # Phase 4: unified intelligence block (additive — read from
+                # risk_output which carries it from behavior_object).
+                "phase4Intelligence": (
+                    (risk_output or {}).get("phase4_intelligence")
+                    or (behavior_output or {}).get("phase4_intelligence")
+                )
             }
         }
         

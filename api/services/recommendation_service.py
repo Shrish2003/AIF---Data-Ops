@@ -1,19 +1,12 @@
-import json
-import os
 from typing import Dict, Any
+
+from api.services.execution_data import load_execution_output
 
 class RecommendationService:
 
     @staticmethod
     def _load_execution_output() -> Dict[str, Any]:
-        path = "output/execution_output.json"
-        if not os.path.exists(path):
-            return {}
-        try:
-            with open(path, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception:
-            return {}
+        return load_execution_output()
 
     @classmethod
     def get_recommendation(cls, pipeline_id: str) -> Dict[str, Any]:

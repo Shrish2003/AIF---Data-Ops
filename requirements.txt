@@ -9,4 +9,5 @@ python-dotenv
 openpyxl
 pytest
 google-generativeai
-requests
+requests
+chromadb

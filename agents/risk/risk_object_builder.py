@@ -59,4 +59,12 @@ class RiskObjectBuilder:
 
         }
 
+        if "historical_context" in behavior_object:
+            risk_object["historical_context"] = behavior_object["historical_context"]
+
+        # Phase 4: propagate intelligence block (additive — does not affect
+        # risk calculations)
+        if "phase4_intelligence" in behavior_object:
+            risk_object["phase4_intelligence"] = behavior_object["phase4_intelligence"]
+
         return risk_object

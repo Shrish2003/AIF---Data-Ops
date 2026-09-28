@@ -153,6 +153,30 @@ class BehaviorAgent:
 
         )
 
+        # Retrieve and attach persistent historical operational memory context
+        try:
+            from services.memory_retriever import OperationalMemoryRetriever
+            behavior_object["historical_context"] = OperationalMemoryRetriever.retrieve_historical_evidence(behavior_object)
+        except Exception as e:
+            logger.warning(f"Failed to retrieve operational memory: {e}")
+            behavior_object["historical_context"] = {
+                "available": False,
+                "retrieval_query": "",
+                "retrieval_count": 0,
+                "matches": []
+            }
+
+        # Phase 4: Evidence-based intelligence layer (additive — does not
+        # modify any existing behavior field or risk input).
+        try:
+            from services.phase4_orchestrator import compute_phase4_intelligence
+            behavior_object["phase4_intelligence"] = compute_phase4_intelligence(
+                behavior_object
+            )
+        except Exception as e:
+            logger.warning(f"Phase 4 intelligence failed gracefully: {e}")
+            behavior_object["phase4_intelligence"] = {"available": False}
+
         return behavior_object
 
     # =====================================================

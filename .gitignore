@@ -32,6 +32,7 @@ logs/
 data/raw/*
 data/processed/*
 data/sample/*
+data/chromadb/*
 !data/raw/.gitkeep
 !data/processed/.gitkeep
 !data/sample/.gitkeep

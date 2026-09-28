@@ -1,20 +1,17 @@
-import json
-import os
 from typing import Dict, Any, List
 from api.services.agent_service import AgentService
 from api.services.pipeline_details_service import PipelineDetailsService
+from api.services.execution_data import load_execution_metadata, load_execution_output
 
 class DashboardService:
 
     @staticmethod
     def _load_json_file(path: str) -> Dict[str, Any]:
-        if not os.path.exists(path):
-            return {}
-        try:
-            with open(path, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception:
-            return {}
+        if path.endswith("execution_output.json"):
+            return load_execution_output()
+        if path.endswith("execution_metadata.json"):
+            return load_execution_metadata()
+        return {}
 
     @classmethod
     def get_summary(cls) -> Dict[str, Any]:
